@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者画面 - 適性診断ツール</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .admin-container {
+            max-width: 1200px;
+        }
+
+        .login-section {
+            max-width: 400px;
+            margin: 2rem auto;
+        }
+
+        .results-list {
+            margin-top: 2rem;
+        }
+
+        .result-item {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .result-details {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: var(--background-color);
+            border-radius: 4px;
+        }
+
+        .category-score {
+            margin-bottom: 0.5rem;
+        }
+
+        .score-bar {
+            height: 10px;
+            background-color: var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .category-name {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .score-value {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+        }
+
+        .analysis-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .recommendation {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #e8f4f8;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container admin-container">
+        <header>
+            <h1>管理者画面 - 適性診断ツール</h1>
+        </header>
+
+        <main>
+            <section id="login-section" class="section login-section">
+                <h2>ログイン</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="admin-password">パスワード</label>
+                        <input type="password" id="admin-password" required>
+                    </div>
+                    <button type="submit" class="btn">ログイン</button>
+                </form>
+            </section>
+
+            <section id="results-section" class="section hidden">
+                <h2>診断結果一覧</h2>
+                <div id="results-list" class="results-list"></div>
+            </section>
+        </main>
+    </div>
+    <script>
+        // 管理者パスワード（実際の運用ではより安全な方法を使用することを推奨）
+        const ADMIN_PASSWORD = 'admin123';
+
+        // DOM要素
+        const loginSection = document.getElementById('login-section');
+        const resultsSection = document.getElementById('results-section');
+        const loginForm = document.getElementById('login-form');
+        const resultsList = document.getElementById('results-list');
+
+        // カテゴリ名の日本語表示
+        const categoryNames = {
+            problemSolving: '問題解決力',
+            planning: '計画性',
+            teamwork: 'チームワーク',
+            communication: 'コミュニケーション力',
+            adaptability: '適応力',
+            leadership: 'リーダーシップ'
+        };
+
+        // ログイン処理
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const password = document.getElementById('admin-password').value;
+            
+            if (password === ADMIN_PASSWORD) {
+                loginSection.classList.add('hidden');
+                resultsSection.classList.remove('hidden');
+                loadResults();
+            } else {
+                alert('パスワードが正しくありません');
+            }
+        });
+
+        // 結果の読み込み
+        function loadResults() {
+            const results = JSON.parse(localStorage.getItem('assessmentResults') || '[]');
+            resultsList.innerHTML = '';
+
+            results.forEach((result, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.innerHTML = `
+                    <h3>${result.userName} (ID: ${result.userId})</h3>
+                    <p>診断日時: ${new Date(result.timestamp).toLocaleString()}</p>
+                    <button class="btn" onclick="showDetails(${index})">詳細を表示</button>
+                    <div id="details-${index}" class="result-details hidden">
+                        ${generateDetailsHTML(result)}
+                    </div>
+                `;
+                resultsList.appendChild(resultItem);
+            });
+        }
+
+        // 詳細表示の切り替え
+        function showDetails(index) {
+            const details = document.getElementById(`details-${index}`);
+            details.classList.toggle('hidden');
+        }
+
+        // 詳細HTMLの生成
+        function generateDetailsHTML(result) {
+            let html = '<div class="category-scores">';
+            
+            // カテゴリごとのスコア計算と表示
+            for (const category in result.answers) {
+                const scores = result.answers[category];
+                const average = scores.reduce((a, b) => a + b, 0) / scores.length;
+                
+                html += `
+                    <div class="category-score">
+                        <div class="category-name">${categoryNames[category]}</div>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: ${(average / 5) * 100}%"></div>
+                        </div>
+                        <div class="score-value">平均スコア: ${average.toFixed(2)}</div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            
+            // 分析と推奨
+            html += `
+                <div class="analysis-section">
+                    <h3>分析結果</h3>
+                    <p>${generateAnalysis(result.answers)}</p>
+                </div>
+                <div class="recommendation">
+                    <h3>推奨される職場環境</h3>
+                    <p>${generateRecommendation(result.answers)}</p>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        // 分析結果の生成
+        function generateAnalysis(answers) {
+            const strengths = [];
+            const improvements = [];
+            
+            for (const category in answers) {
+                const average = answers[category].reduce((a, b) => a + b, 0) / answers[category].length;
+                if (average >= 4) {
+                    strengths.push(categoryNames[category]);
+                } else if (average <= 2) {
+                    improvements.push(categoryNames[category]);
+                }
+            }
+            
+            let analysis = '';
+            if (strengths.length > 0) {
+                analysis += `強み: ${strengths.join('、')}。`;
+            }
+            if (improvements.length > 0) {
+                analysis += `改善点: ${improvements.join('、')}。`;
+            }
+            
+            return analysis || '全体的にバランスの取れた特性を示しています。';
+        }
+
+        // 推奨環境の生成
+        function generateRecommendation(answers) {
+            const recommendations = [];
+            
+            for (const category in answers) {
+                const average = answers[category].reduce((a, b) => a + b, 0) / answers[category].length;
+                if (average >= 4) {
+                    switch (category) {
+                        case 'problemSolving':
+                            recommendations.push('問題解決が重要な役割を担う職場');
+                            break;
+                        case 'planning':
+                            recommendations.push('計画立案や戦略策定が求められる職場');
+                            break;
+                        case 'teamwork':
+                            recommendations.push('チームワークが重視される職場');
+                            break;
+                        case 'communication':
+                            recommendations.push('コミュニケーションが重要な職場');
+                            break;
+                        case 'adaptability':
+                            recommendations.push('変化に対応する柔軟性が求められる職場');
+                            break;
+                        case 'leadership':
+                            recommendations.push('リーダーシップを発揮できる職場');
+                            break;
+                    }
+                }
+            }
+            
+            return recommendations.length > 0 
+                ? recommendations.join('、') 
+                : '様々な職場環境に適応できる可能性があります。';
+        }
+    </script>
+</body>
+</html> 
